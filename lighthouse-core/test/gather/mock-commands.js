@@ -118,7 +118,6 @@ function createMockOnceFn() {
   });
 
   const mockFn = Object.assign(mockFnImpl, {
-    ...mockFnImpl,
     /**
      * @template {keyof LH.CrdpEvents} E
      * @param {E} event
@@ -166,7 +165,6 @@ function createMockOnFn() {
   });
 
   const mockFn = Object.assign(mockFnImpl, {
-    ...mockFnImpl,
     /**
      * @template {keyof LH.CrdpEvents} E
      * @param {E} event
