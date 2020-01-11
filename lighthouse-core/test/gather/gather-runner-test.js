@@ -246,7 +246,7 @@ describe('GatherRunner', function() {
 
     it('works when running on desktop device with mobile emulation', async () => {
       const driver = fakeDriver;
-      const config = new Config({
+      const config = makeConfig({
         passes: [],
         settings: {emulatedFormFactor: 'mobile', internalDisableDeviceScreenEmulation: false},
       });
@@ -258,7 +258,7 @@ describe('GatherRunner', function() {
 
     it('works when running on mobile device without emulation', async () => {
       const driver = fakeDriverUsingRealMobileDevice;
-      const config = new Config({
+      const config = makeConfig({
         passes: [],
         settings: {emulatedFormFactor: 'none', internalDisableDeviceScreenEmulation: false},
       });
@@ -270,7 +270,7 @@ describe('GatherRunner', function() {
 
     it('works when running on mobile device with desktop emulation', async () => {
       const driver = fakeDriverUsingRealMobileDevice;
-      const config = new Config({
+      const config = makeConfig({
         passes: [],
         settings: {emulatedFormFactor: 'desktop', internalDisableDeviceScreenEmulation: false},
       });
@@ -284,6 +284,11 @@ describe('GatherRunner', function() {
   describe('collects HostFormFactor as an artifact', () => {
     const requestedUrl = 'https://example.com';
 
+    /**
+     * @param {string} name
+     * @param {string} userAgent
+     * @param {string} expectedValue
+     */
     function test(name, userAgent, expectedValue) {
       it(name, async () => {
         const driver = Object.assign({}, fakeDriver, {
@@ -291,7 +296,7 @@ describe('GatherRunner', function() {
             return Promise.resolve({userAgent: userAgent});
           },
         });
-        const config = new Config({
+        const config = makeConfig({
           passes: [],
           settings: {},
         });
@@ -377,10 +382,12 @@ describe('GatherRunner', function() {
 
   it('clears origin storage', () => {
     const asyncFunc = () => Promise.resolve();
+    /** @type {Record<string, boolean>} */
     const tests = {
       calledCleanBrowserCaches: false,
       calledClearStorage: false,
     };
+    /** @param {string} variable */
     const createCheck = variable => () => {
       tests[variable] = true;
       return Promise.resolve();
@@ -409,9 +416,11 @@ describe('GatherRunner', function() {
 
   it('clears the disk & memory cache on a perf run', async () => {
     const asyncFunc = () => Promise.resolve();
+    /** @type {Record<string, boolean>} */
     const tests = {
       calledCleanBrowserCaches: false,
     };
+    /** @param {string} variable */
     const createCheck = variable => () => {
       tests[variable] = true;
       return Promise.resolve();
@@ -491,13 +500,14 @@ describe('GatherRunner', function() {
     const navigationError = new LHError(LHError.errors.NO_FCP);
     const driver = Object.assign({}, fakeDriver, {
       online: true,
+      /** @param {string} url */
       gotoURL: url => url.includes('blank') ? null : Promise.reject(navigationError),
       endDevtoolsLog() {
         return networkRecordsToDevtoolsLog([{url: requestedUrl}]);
       },
     });
 
-    const config = new Config({
+    const config = makeConfig({
       passes: [{
         recordTrace: true,
         passName: 'firstPass',
@@ -528,6 +538,7 @@ describe('GatherRunner', function() {
       .mockRejectedValueOnce(navigationError);
     const driver = Object.assign({}, fakeDriver, {
       online: true,
+      /** @param {string} url */
       gotoURL: url => url.includes('blank') ? gotoUrlForAboutBlank() : gotoUrlForRealUrl(),
       endDevtoolsLog() {
         return networkRecordsToDevtoolsLog([{url: requestedUrl}]);
@@ -557,10 +568,12 @@ describe('GatherRunner', function() {
 
   it('does not clear origin storage with flag --disable-storage-reset', () => {
     const asyncFunc = () => Promise.resolve();
+    /** @type {Record<string, boolean} */
     const tests = {
       calledCleanBrowserCaches: false,
       calledClearStorage: false,
     };
+    /** @param {string} variable */
     const createCheck = variable => () => {
       tests[variable] = true;
       return Promise.resolve();
@@ -766,7 +779,7 @@ describe('GatherRunner', function() {
     const t1 = new TestGatherer();
     const t2 = new TestGatherer();
 
-    const config = new Config({
+    const config = makeConfig({
       passes: [{
         recordTrace: true,
         passName: 'firstPass',
@@ -792,7 +805,7 @@ describe('GatherRunner', function() {
   });
 
   it('respects trace names', () => {
-    const config = new Config({
+    const config = makeConfig({
       passes: [{
         recordTrace: true,
         passName: 'firstPass',
@@ -819,7 +832,7 @@ describe('GatherRunner', function() {
   });
 
   it('doesn\'t leave networkRecords as an artifact', () => {
-    const config = new Config({
+    const config = makeConfig({
       passes: [{
         recordTrace: true,
         passName: 'firstPass',
@@ -851,7 +864,7 @@ describe('GatherRunner', function() {
       endDevtoolsLog: () => [],
     });
 
-    const config = new Config({
+    const config = makeConfig({
       passes: [{
         passName: 'firstPass',
         recordTrace: true,
@@ -873,7 +886,7 @@ describe('GatherRunner', function() {
     const t1 = new (class Test1 extends TestGatherer {})();
     const t2 = new (class Test2 extends TestGatherer {})();
     const t3 = new (class Test3 extends TestGatherer {})();
-    const config = new Config({
+    const config = makeConfig({
       passes: [{
         passName: 'firstPass',
         recordTrace: true,
@@ -1222,23 +1235,36 @@ describe('GatherRunner', function() {
   describe('artifact collection', () => {
     // Make sure our gatherers never execute in parallel
     it('runs gatherer lifecycle methods strictly in sequence', async () => {
+      /** @type {Record<string, number>} */
       const counter = {
         beforePass: 0,
         pass: 0,
         afterPass: 0,
       };
       const shortPause = () => new Promise(resolve => setTimeout(resolve, 50));
+      /**
+       * @param {string} counterName
+       * @param {number} value
+       */
       async function fastish(counterName, value) {
         assert.strictEqual(counter[counterName], value - 1);
         counter[counterName] = value;
         await shortPause();
         assert.strictEqual(counter[counterName], value);
       }
+      /**
+       * @param {string} counterName
+       * @param {number} value
+       */
       async function medium(counterName, value) {
         await Promise.resolve();
         await Promise.resolve();
         await fastish(counterName, value);
       }
+      /**
+       * @param {string} counterName
+       * @param {number} value
+       */
       async function slowwwww(counterName, value) {
         await shortPause();
         await shortPause();
@@ -1283,7 +1309,7 @@ describe('GatherRunner', function() {
           }
         },
       ];
-      const config = new Config({
+      const config = makeConfig({
         passes: [{
           gatherers: gatherers.map(G => ({instance: new G()})),
         }],
@@ -1338,7 +1364,7 @@ describe('GatherRunner', function() {
         }(),
       ].map(instance => ({instance}));
       const gathererNames = gatherers.map(gatherer => gatherer.instance.name);
-      const config = new Config({
+      const config = makeConfig({
         passes: [{
           gatherers,
         }],
@@ -1355,7 +1381,7 @@ describe('GatherRunner', function() {
       });
     });
 
-    it('passes gatherer options', () => {
+    it('passes gatherer options', async () => {
       const calls = {beforePass: [], pass: [], afterPass: []};
       class EavesdropGatherer extends Gatherer {
         beforePass(context) {
@@ -1376,34 +1402,36 @@ describe('GatherRunner', function() {
         {instance: new class EavesdropGatherer3 extends EavesdropGatherer {}()},
       ];
 
-      const config = new Config({
+      const config = makeConfig({
         passes: [{gatherers}],
       });
 
-      return GatherRunner.run(config.passes, {
+      /** @type {any} */
+      const artifacts = await GatherRunner.run(config.passes, {
         driver: fakeDriver,
         requestedUrl: 'https://example.com',
         settings: config.settings,
-      }).then(artifacts => {
-        assert.equal(artifacts.EavesdropGatherer1, 1);
-        assert.equal(artifacts.EavesdropGatherer2, 2);
-        assert.equal(artifacts.EavesdropGatherer3, 'none');
-
-        // assert that all three phases received the gatherer options expected
-        const expectedOptions = [{x: 1}, {x: 2}, {}];
-        for (let i = 0; i < 3; i++) {
-          assert.deepEqual(calls.beforePass[i], expectedOptions[i]);
-          assert.deepEqual(calls.pass[i], expectedOptions[i]);
-          assert.deepEqual(calls.afterPass[i], expectedOptions[i]);
-        }
       });
+      
+      assert.equal(artifacts.EavesdropGatherer1, 1);
+      assert.equal(artifacts.EavesdropGatherer2, 2);
+      assert.equal(artifacts.EavesdropGatherer3, 'none');
+
+      // assert that all three phases received the gatherer options expected
+      const expectedOptions = [{x: 1}, {x: 2}, {}];
+      for (let i = 0; i < 3; i++) {
+        assert.deepEqual(calls.beforePass[i], expectedOptions[i]);
+        assert.deepEqual(calls.pass[i], expectedOptions[i]);
+        assert.deepEqual(calls.afterPass[i], expectedOptions[i]);
+      }
     });
 
-    it('uses the last not-undefined phase result as artifact', () => {
+    it('uses the last not-undefined phase result as artifact', async () => {
       const recoverableError = new Error('My recoverable error');
       const someOtherError = new Error('Bad, bad error.');
 
       // Gatherer results are all expected to be arrays of promises
+      /** @type {any} Using fake gatherers. */
       const gathererResults = {
         // 97 wins.
         AfterGatherer: [
@@ -1434,12 +1462,12 @@ describe('GatherRunner', function() {
         ],
       };
 
-      return GatherRunner.collectArtifacts(gathererResults).then(({artifacts}) => {
-        assert.strictEqual(artifacts.AfterGatherer, 97);
-        assert.strictEqual(artifacts.PassGatherer, 284);
-        assert.strictEqual(artifacts.SingleErrorGatherer, recoverableError);
-        assert.strictEqual(artifacts.TwoErrorGatherer, recoverableError);
-      });
+      /** @type {any} Using fake gatherers. */
+      const {artifacts} = await GatherRunner.collectArtifacts(gathererResults);
+      assert.strictEqual(artifacts.AfterGatherer, 97);
+      assert.strictEqual(artifacts.PassGatherer, 284);
+      assert.strictEqual(artifacts.SingleErrorGatherer, recoverableError);
+      assert.strictEqual(artifacts.TwoErrorGatherer, recoverableError);
     });
 
     it('produces a deduped LighthouseRunWarnings artifact from array of warnings', async () => {
@@ -1458,7 +1486,7 @@ describe('GatherRunner', function() {
         }
       }
 
-      const config = new Config({
+      const config = makeConfig({
         passes: [{
           gatherers: [{instance: new WarningGatherer()}],
         }],
@@ -1511,7 +1539,7 @@ describe('GatherRunner', function() {
         }(),
       ].map(instance => ({instance}));
       const gathererNames = gatherers.map(gatherer => gatherer.instance.name);
-      const config = new Config({
+      const config = makeConfig({
         passes: [{
           gatherers,
         }],
@@ -1531,7 +1559,7 @@ describe('GatherRunner', function() {
     });
 
     it('rejects if a gatherer does not provide an artifact', () => {
-      const config = new Config({
+      const config = makeConfig({
         passes: [{
           recordTrace: true,
           passName: 'firstPass',
@@ -1549,7 +1577,7 @@ describe('GatherRunner', function() {
     });
 
     it('rejects when domain name can\'t be resolved', () => {
-      const config = new Config({
+      const config = makeConfig({
         passes: [{
           recordTrace: true,
           passName: 'firstPass',
@@ -1581,7 +1609,7 @@ describe('GatherRunner', function() {
     });
 
     it('resolves when domain name can\'t be resolved but is offline', () => {
-      const config = new Config({
+      const config = makeConfig({
         passes: [{
           recordTrace: true,
           passName: 'firstPass',
