@@ -28,23 +28,8 @@ type SplitType<T> =
 // (T1 | T2 | T3) -> [RecursivePartial(T1), RecursivePartial(T2), RecursivePartial(T3)]
 type RecursivePartialUnion<T, S=SplitType<T>> = {[P in keyof S]: RecursivePartial<S[P]>};
 
-// Returns length of tuple.
+// Return length of a tuple.
 type GetLength<T extends any[]> = T extends { length: infer L } ? L : never
-
-// type Test2<T, S=SplitType<T>> = {[P in keyof S]: RecursivePartial<S[P]>};
-// type C = Test2<{
-//   a: Array<{a: number} | null;
-// }>[number];
-
-// type E = RecursivePartial<{
-//   a: Array<{a: number}> | Array<{b: number}> | Array<{c: number}> | null;
-// }>;
-// type E1 = SplitType<{
-//   a: Array<{a: number}> | Array<{b: number}> | Array<{c: number}> | null;
-// }['a']>;
-
-// type Test3<T> = T extends (infer U1 extends any ? any : never) | (infer U1 extends any ? any : never) ? 1 : 2;
-// type D = Test3<string>;
 
 declare global {
   // Augment Intl to include
