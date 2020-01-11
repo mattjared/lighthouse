@@ -16,6 +16,7 @@ type UnionToFunctions<U> =
   U extends unknown ? (k: U) => void : never;
 
 type IntersectionOfFunctionsToType<F> =
+  F extends { (a: infer A): void; (b: infer B): void; (c: infer C): void; (d: infer D): void; } ? [A, B, C, D] :
   F extends { (a: infer A): void; (b: infer B): void; (c: infer C): void; } ? [A, B, C] :
   F extends { (a: infer A): void; (b: infer B): void; } ? [A, B] :
   F extends { (a: infer A): void } ? [A] :
@@ -68,10 +69,10 @@ declare global {
   type RecursivePartial<T> = {
     [P in keyof T]+?:
       // If type is a union, map each individual component and transform the resultant tuple back into a union.
-      // Only 3 components are supported. For more, modify the following line and `IntersectionOfFunctionsToType`.
+      // Only up to 4 components is supported. For more, modify the following line and `IntersectionOfFunctionsToType`.
       // Guard against large string unions, which would be unreasonable to support (much more than 3 components is common).
       SplitType<T[P]> extends string[] ? T[P] :
-      GetLength<SplitType<T[P]>> extends 2|3 ? RecursivePartialUnion<T[P]>[number] :
+      GetLength<SplitType<T[P]>> extends 2|3|4 ? RecursivePartialUnion<T[P]>[number] :
       // Recurse into arrays.
       T[P] extends (infer U)[] ? RecursivePartial<U>[] :
       // Recurse into objects.

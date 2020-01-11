@@ -57,11 +57,11 @@ function makeConfig(json) {
   return {passes: config.passes, settings: config.settings};
 }
 
-const t = /** @type {RecursivePartial<LH.Config.Json>} */ ({});
-const t2 = t.passes && t.passes[0];
-if (t2) {
-  t2;
-}
+const LoadFailureMode = {
+  fatal: /** @type {'fatal'} */ ('fatal'),
+  ignore: /** @type {'ignore'} */ ('ignore'),
+  warn: /** @type {'warn'} */ ('warn'),
+};
 
 class TestGatherer extends Gatherer {
   constructor() {
@@ -441,7 +441,7 @@ describe('GatherRunner', function() {
     };
     const passConfig = {
       passName: 'default',
-      loadFailureMode: 'ignore',
+      loadFailureMode: LoadFailureMode.ignore,
       recordTrace: true,
       useThrottling: true,
       gatherers: [],
@@ -468,13 +468,14 @@ describe('GatherRunner', function() {
     const navigationError = new LHError(LHError.errors.NO_FCP);
     const driver = Object.assign({}, fakeDriver, {
       online: true,
+      /** @param {string} url */
       gotoURL: url => url.includes('blank') ? null : Promise.reject(navigationError),
       endDevtoolsLog() {
         return networkRecordsToDevtoolsLog([{url: requestedUrl, statusCode: 500}]);
       },
     });
 
-    const config = new Config({
+    const config = makeConfig({
       passes: [{
         recordTrace: true,
         passName: 'firstPass',
@@ -490,7 +491,8 @@ describe('GatherRunner', function() {
     const artifacts = await GatherRunner.run(config.passes, options);
     expect(artifacts.LighthouseRunWarnings).toHaveLength(1);
     expect(artifacts.PageLoadError).toBeInstanceOf(Error);
-    expect(artifacts.PageLoadError.code).toEqual('ERRORED_DOCUMENT_REQUEST');
+    expect(artifacts.PageLoadError).toMatchObject({code: 'ERRORED_DOCUMENT_REQUEST'});
+    // @ts-ignore: Fake gatherer.
     expect(artifacts.TestGatherer).toBeUndefined();
   });
 
@@ -523,7 +525,8 @@ describe('GatherRunner', function() {
     const artifacts = await GatherRunner.run(config.passes, options);
     expect(artifacts.LighthouseRunWarnings).toHaveLength(1);
     expect(artifacts.PageLoadError).toBeInstanceOf(Error);
-    expect(artifacts.PageLoadError.code).toEqual('NO_FCP');
+    expect(artifacts.PageLoadError).toMatchObject({code: 'NO_FCP'});
+    // @ts-ignore: Fake gatherer.
     expect(artifacts.TestGatherer).toBeUndefined();
   });
 
@@ -545,7 +548,7 @@ describe('GatherRunner', function() {
       },
     });
 
-    const config = new Config({
+    const config = makeConfig({
       passes: [{passName: 'defaultPass', recordTrace: true}, {
         loadFailureMode: 'warn',
         recordTrace: true,
@@ -562,13 +565,14 @@ describe('GatherRunner', function() {
     const artifacts = await GatherRunner.run(config.passes, options);
     expect(artifacts.LighthouseRunWarnings).toHaveLength(1);
     expect(artifacts.PageLoadError).toEqual(null);
+    // @ts-ignore: Fake gatherer.
     expect(artifacts.TestGatherer).toBeUndefined();
     expect(artifacts.devtoolsLogs).toHaveProperty('pageLoadError-nextPass');
   });
 
   it('does not clear origin storage with flag --disable-storage-reset', () => {
     const asyncFunc = () => Promise.resolve();
-    /** @type {Record<string, boolean} */
+    /** @type {Record<string, boolean>} */
     const tests = {
       calledCleanBrowserCaches: false,
       calledClearStorage: false,
@@ -749,6 +753,7 @@ describe('GatherRunner', function() {
 
   it('resets scroll position between every gatherer', async () => {
     class ScrollMcScrollyGatherer extends TestGatherer {
+      /** @param {{driver: Driver}} context */
       afterPass(context) {
         context.driver.scrollTo({x: 1000, y: 1000});
       }
@@ -766,7 +771,11 @@ describe('GatherRunner', function() {
       ],
     };
 
-    await GatherRunner.afterPass({url, driver, passConfig}, {}, {TestGatherer: []});
+    /** @type {any} Using fake gatherer. */
+    const gathererResults = {
+      TestGatherer: [],
+    };
+    await GatherRunner.afterPass({url, driver, passConfig}, {}, gathererResults);
     // One time for the afterPass of ScrollMcScrolly, two times for the resets of the two gatherers.
     expect(scrollToSpy.mock.calls).toEqual([
       [{x: 1000, y: 1000}],
@@ -851,6 +860,7 @@ describe('GatherRunner', function() {
 
     return GatherRunner.run(config.passes, options)
       .then(artifacts => {
+        // @ts-ignore
         assert.equal(artifacts.networkRecords, undefined);
       });
   });
@@ -858,7 +868,7 @@ describe('GatherRunner', function() {
   it('saves trace and devtoolsLog with error prefix when there was a runtime error', async () => {
     const requestedUrl = 'https://example.com';
     const driver = Object.assign({}, fakeDriver, {
-      // resolved URL here does not match any request in the network records, causing a runtime error.
+      /** @param {string} _ Resolved URL here does not match any request in the network records, causing a runtime error. */
       gotoURL: async _ => requestedUrl,
       online: true,
       endDevtoolsLog: () => [],
@@ -874,7 +884,8 @@ describe('GatherRunner', function() {
     const options = {driver, requestedUrl, settings: config.settings};
     const artifacts = await GatherRunner.run(config.passes, options);
 
-    expect(artifacts.PageLoadError.code).toEqual('NO_DOCUMENT_REQUEST');
+    expect(artifacts.PageLoadError).toMatchObject({code: 'NO_DOCUMENT_REQUEST'});
+    // @ts-ignore: Fake gatherer.
     expect(artifacts.TestGatherer).toBeUndefined();
 
     // The only loadData available should be prefixed with `pageLoadError-`.
@@ -905,7 +916,7 @@ describe('GatherRunner', function() {
     const requestedUrl = 'https://www.reddit.com/r/nba';
     let firstLoad = true;
     const driver = Object.assign({}, fakeDriver, {
-      // Loads the page successfully in the first pass, fails with NO_FCP in the second.
+      /** @param {string} url Loads the page successfully in the first pass, fails with NO_FCP in the second. */
       async gotoURL(url) {
         if (url.includes('blank')) return null;
         if (firstLoad) {
@@ -926,13 +937,16 @@ describe('GatherRunner', function() {
     expect(t3.called).toBe(false);
 
     // But only t1 has a valid artifact; t2 and t3 aren't defined.
+    // @ts-ignore: Fake gatherer.
     expect(artifacts.Test1).toBe('MyArtifact');
+    // @ts-ignore: Fake gatherer.
     expect(artifacts.Test2).toBeUndefined();
+    // @ts-ignore: Fake gatherer.
     expect(artifacts.Test3).toBeUndefined();
 
     // PageLoadError artifact has the error.
     expect(artifacts.PageLoadError).toBeInstanceOf(LHError);
-    expect(artifacts.PageLoadError.code).toEqual('NO_FCP');
+    expect(artifacts.PageLoadError).toMatchObject({code: 'NO_FCP'});
 
     // firstPass has a saved trace and devtoolsLog, secondPass has an error trace and log.
     expect(Object.keys(artifacts.traces)).toEqual(['firstPass', 'pageLoadError-secondPass']);
@@ -1108,12 +1122,6 @@ describe('GatherRunner', function() {
   });
 
   describe('#getPageLoadError', () => {
-    const LoadFailureMode = {
-      fatal: /** @type {'fatal'} */ ('fatal'),
-      ignore: /** @type {'ignore'} */ ('ignore'),
-      warn: /** @type {'warn'} */ ('warn'),
-    };
-
     /**
      * @param {RecursivePartial<LH.Gatherer.PassContext>} passContext
      * @param {RecursivePartial<LH.Gatherer.LoadData>} loadData
@@ -1315,6 +1323,7 @@ describe('GatherRunner', function() {
         }],
       });
 
+      /** @type {any} Using fake gatherers. */
       const artifacts = await GatherRunner.run(config.passes, {
         driver: fakeDriver,
         requestedUrl: 'https://example.com',
@@ -1382,37 +1391,47 @@ describe('GatherRunner', function() {
     });
 
     it('passes gatherer options', async () => {
+      /** @type {Record<string, any[]>} */
       const calls = {beforePass: [], pass: [], afterPass: []};
-      class EavesdropGatherer extends Gatherer {
-        beforePass(context) {
-          calls.beforePass.push(context.options);
-        }
-        pass(context) {
-          calls.pass.push(context.options);
-        }
-        afterPass(context) {
-          calls.afterPass.push(context.options);
-          return context.options.x || 'none';
-        }
-      }
+      /** @param {string} name */
+      const makeEavesdropGatherer = name => {
+        const C = class extends Gatherer {};
+        Object.defineProperty(C, 'name', {value: name});
+        return Object.assign(new C, {
+          /** @param {LH.Gatherer.PassContext} context */
+          beforePass(context) {
+            calls.beforePass.push(context.options);
+          },
+          /** @param {LH.Gatherer.PassContext} context */
+          pass(context) {
+            calls.pass.push(context.options);
+          },
+          /** @param {LH.Gatherer.PassContext} context */
+          afterPass(context) {
+            calls.afterPass.push(context.options);
+            // @ts-ignore
+            return context.options.x || 'none';
+          },
+        });
+      };
 
       const gatherers = [
-        {instance: new class EavesdropGatherer1 extends EavesdropGatherer {}(), options: {x: 1}},
-        {instance: new class EavesdropGatherer2 extends EavesdropGatherer {}(), options: {x: 2}},
-        {instance: new class EavesdropGatherer3 extends EavesdropGatherer {}()},
+        {instance: makeEavesdropGatherer('EavesdropGatherer1'), options: {x: 1}},
+        {instance: makeEavesdropGatherer('EavesdropGatherer2'), options: {x: 2}},
+        {instance: makeEavesdropGatherer('EavesdropGatherer3')},
       ];
 
       const config = makeConfig({
         passes: [{gatherers}],
       });
 
-      /** @type {any} */
+      /** @type {any} Using fake gatherers. */
       const artifacts = await GatherRunner.run(config.passes, {
         driver: fakeDriver,
         requestedUrl: 'https://example.com',
         settings: config.settings,
       });
-      
+
       assert.equal(artifacts.EavesdropGatherer1, 1);
       assert.equal(artifacts.EavesdropGatherer2, 2);
       assert.equal(artifacts.EavesdropGatherer3, 'none');
@@ -1478,6 +1497,7 @@ describe('GatherRunner', function() {
       ];
 
       class WarningGatherer extends Gatherer {
+        /** @param {LH.Gatherer.PassContext} passContext */
         afterPass(passContext) {
           passContext.LighthouseRunWarnings.push(...runWarnings, ...runWarnings);
           assert.strictEqual(passContext.LighthouseRunWarnings.length, runWarnings.length * 2);
@@ -1553,7 +1573,7 @@ describe('GatherRunner', function() {
         gathererNames.forEach(gathererName => {
           const errorArtifact = artifacts[gathererName];
           assert.ok(errorArtifact instanceof Error);
-          assert.strictEqual(errorArtifact.message, gathererName);
+          expect(errorArtifact).toMatchObject({message: gathererName});
         });
       });
     });
@@ -1642,6 +1662,7 @@ describe('GatherRunner', function() {
 
   describe('.getWebAppManifest', () => {
     const MANIFEST_URL = 'https://example.com/manifest.json';
+    /** @type {RecursivePartial<LH.Gatherer.PassContext>} */
     let passContext;
 
     beforeEach(() => {
@@ -1662,10 +1683,11 @@ describe('GatherRunner', function() {
     it('should parse the manifest when found', async () => {
       const manifest = {name: 'App'};
       const getAppManifest = jest.spyOn(fakeDriver, 'getAppManifest');
+      // @ts-ignore: Some terrible @types/jest bug lies here.
       getAppManifest.mockResolvedValueOnce({data: JSON.stringify(manifest), url: MANIFEST_URL});
       const result = await GatherRunner.getWebAppManifest(passContext);
       expect(result).toHaveProperty('raw', JSON.stringify(manifest));
-      expect(result.value).toMatchObject({
+      expect(result && result.value).toMatchObject({
         name: {value: 'App', raw: 'App'},
         start_url: {value: passContext.url, raw: undefined},
       });
