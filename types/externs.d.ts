@@ -7,6 +7,44 @@
 import _Crdp from 'devtools-protocol/types/protocol';
 import _CrdpMappings from 'devtools-protocol/types/protocol-mapping'
 
+// Convert unions (T1 | T2 | T3) into tuples ([T1, T2, T3]).
+// https://stackoverflow.com/a/52933137/2788187 https://stackoverflow.com/a/50375286
+type UnionToIntersection<U> =
+(U extends any ? (k: U)=>void : never) extends ((k: infer I)=>void) ? I : never
+
+type UnionToFunctions<U> =
+  U extends unknown ? (k: U) => void : never;
+
+type IntersectionOfFunctionsToType<F> =
+  F extends { (a: infer A): void; (b: infer B): void; (c: infer C): void; } ? [A, B, C] :
+  F extends { (a: infer A): void; (b: infer B): void; } ? [A, B] :
+  F extends { (a: infer A): void } ? [A] :
+  never;
+
+type SplitType<T> =
+  IntersectionOfFunctionsToType<UnionToIntersection<UnionToFunctions<T>>>;
+
+// (T1 | T2 | T3) -> [RecursivePartial(T1), RecursivePartial(T2), RecursivePartial(T3)]
+type RecursivePartialUnion<T, S=SplitType<T>> = {[P in keyof S]: RecursivePartial<S[P]>};
+
+// Returns length of tuple.
+type GetLength<T extends any[]> = T extends { length: infer L } ? L : never
+
+// type Test2<T, S=SplitType<T>> = {[P in keyof S]: RecursivePartial<S[P]>};
+// type C = Test2<{
+//   a: Array<{a: number} | null;
+// }>[number];
+
+// type E = RecursivePartial<{
+//   a: Array<{a: number}> | Array<{b: number}> | Array<{c: number}> | null;
+// }>;
+// type E1 = SplitType<{
+//   a: Array<{a: number}> | Array<{b: number}> | Array<{c: number}> | null;
+// }['a']>;
+
+// type Test3<T> = T extends (infer U1 extends any ? any : never) | (infer U1 extends any ? any : never) ? 1 : 2;
+// type D = Test3<string>;
+
 declare global {
   // Augment Intl to include
   // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/getCanonicalLocales
@@ -29,6 +67,12 @@ declare global {
   /** Make optional all properties on T and any properties on object properties of T. */
   type RecursivePartial<T> = {
     [P in keyof T]+?:
+      // If type is a union, map each individual component and transform the resultant tuple back into a union.
+      // Only 3 components are supported. For more, modify the following line and `IntersectionOfFunctionsToType`.
+      // Guard against large string unions, which would be unreasonable to support (much more than 3 components is common).
+      SplitType<T[P]> extends string[] ? T[P] :
+      GetLength<SplitType<T[P]>> extends 2|3 ? RecursivePartialUnion<T[P]>[number] :
+      // SplitType<T[P]> extends [any, any] | [undefined, any, any] ? RecursivePartialUnion<T[P]>[number] :
       T[P] extends (infer U)[] ? RecursivePartial<U>[] :
       T[P] extends (object|undefined) ? RecursivePartial<T[P]> :
       T[P];
