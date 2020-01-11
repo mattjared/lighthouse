@@ -72,9 +72,11 @@ declare global {
       // Guard against large string unions, which would be unreasonable to support (much more than 3 components is common).
       SplitType<T[P]> extends string[] ? T[P] :
       GetLength<SplitType<T[P]>> extends 2|3 ? RecursivePartialUnion<T[P]>[number] :
-      // SplitType<T[P]> extends [any, any] | [undefined, any, any] ? RecursivePartialUnion<T[P]>[number] :
+      // Recurse into arrays.
       T[P] extends (infer U)[] ? RecursivePartial<U>[] :
+      // Recurse into objects.
       T[P] extends (object|undefined) ? RecursivePartial<T[P]> :
+      // Strings, numbers, etc. (terminal types) end here.
       T[P];
   };
 
